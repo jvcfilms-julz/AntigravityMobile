@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     normalizeModelName, isPlausibleModelName, uniqueModels,
-    buildControlScript, listIdeModels, selectIdeModel, startNewIdeChat
+    buildControlScript, listIdeModels, selectIdeModel, startNewIdeChat, isIdeWorkbenchTarget
 } from '../src/ide-chat-controls.mjs';
 
 test('live model names are normalized, not tied to an obsolete static catalogue', () => {
@@ -40,4 +40,14 @@ test('IDE-only operations reject auto/2.0 source without changing IDE state', as
         assert.equal(result.success, false);
         assert.match(result.error, /Choose IDE/);
     }
+});
+
+test('IDE target detection rejects Antigravity 2.0 and other CDP pages', () => {
+    assert.equal(isIdeWorkbenchTarget({ type: 'page',
+        url: 'vscode-file://vscode-app/c:/Programs/Antigravity%20IDE/resources/workbench.html' }), true);
+    assert.equal(isIdeWorkbenchTarget({ type: 'page',
+        url: 'file:///C:/Programs/Antigravity%20IDE/resources/app/out/vs/code/electron-sandbox/workbench/workbench.html' }), true);
+    assert.equal(isIdeWorkbenchTarget({ type: 'page', url: 'http://localhost:9333/index.html' }), false);
+    assert.equal(isIdeWorkbenchTarget({ type: 'page', url: 'http://localhost:9333/2.0/#/chat' }), false);
+    assert.equal(isIdeWorkbenchTarget({ type: 'webview', url: 'vscode-file://vscode-app/workbench.html' }), false);
 });
