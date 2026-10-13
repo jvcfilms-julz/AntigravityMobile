@@ -167,8 +167,18 @@ fun MainScaffold(repo: AppRepository, onOpenSettings: () -> Unit) {
                         // IDE not running → pick a folder to launch it in.
                         onOpenIdePicker = { showIdePicker = true },
                     )
-                    IconButton(onClick = { showConvPicker = true }) {
-                        Icon(Icons.Filled.Add, "New 2.0 conversation in a project")
+                    IconButton(onClick = {
+                        if (session.sourcePreference == "ide") {
+                            tab = Tab.Chat
+                            chatVm.requestNewIdeChat()
+                        } else {
+                            showConvPicker = true
+                        }
+                    }) {
+                        Icon(Icons.Filled.Add,
+                            if (session.sourcePreference == "ide")
+                                "New chat in original Antigravity IDE"
+                            else "New 2.0 conversation in a project")
                     }
                     IconButton(onClick = { sessionVm.loadQuota(); showUsageSheet = true }) {
                         Icon(Icons.Filled.BarChart, "Usage")
@@ -188,7 +198,14 @@ fun MainScaffold(repo: AppRepository, onOpenSettings: () -> Unit) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                Tab.Chat -> ChatScreen(vm = chatVm)
+                Tab.Chat -> ChatScreen(
+                    vm = chatVm,
+                    sourceIsIde = session.sourcePreference == "ide",
+                    onOpenModelPicker = {
+                        sessionVm.loadModels()
+                        showModelSheet = true
+                    },
+                )
                 Tab.Files -> Column(Modifier.fillMaxSize()) {
                     RepoHeader(session.workspaceName) { showRepoSheet = true }
                     FilesScreen(
@@ -279,6 +296,8 @@ fun MainScaffold(repo: AppRepository, onOpenSettings: () -> Unit) {
             models = session.models,
             current = session.currentModel,
             loading = session.modelsLoading,
+            error = session.modelError,
+            onRefresh = { sessionVm.loadModels() },
             onSelect = { sessionVm.selectModel(it); showModelSheet = false },
             onDismiss = { showModelSheet = false },
         )
