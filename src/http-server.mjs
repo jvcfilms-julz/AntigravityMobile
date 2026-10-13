@@ -33,6 +33,7 @@ import * as OllamaClient from './ollama-client.mjs';
 import * as Git from './git-service.mjs';
 import * as HelperBridge from './helper-bridge.mjs';
 import * as Pairing from './pairing-service.mjs';
+import * as IdeChatControls from './ide-chat-controls.mjs';
 import { requireRemotePairing, verifySocketClient, createPairLimiter } from './remote-access-security.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1789,6 +1790,30 @@ app.get('/api/quota/raw', localhostOnly, async (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
+});
+
+// Explicit original-IDE controls: never redirect these requests into 2.0.
+app.get('/api/ide/models', async (req, res) => {
+    const result = await IdeChatControls.listIdeModels();
+    res.status(result.success ? 200 : 503).json(result);
+});
+
+app.post('/api/ide/models/select', async (req, res) => {
+    const result = await IdeChatControls.selectIdeModel(req.body?.model);
+    if (result.success && result.verified) {
+        broadcast('model_changed', { model: result.selected, source: 'ide' });
+    }
+    res.status(result.success ? 200 : 409).json(result);
+});
+
+app.post('/api/ide/conversations/new', async (req, res) => {
+    const result = await IdeChatControls.startNewIdeChat();
+    if (result.success) {
+        // "requested" is accurate even when this IDE assigns a conversation
+        // id only after the first prompt. The response exposes verification.
+        broadcast('ide_conversation_requested', { verified: !!result.verified });
+    }
+    res.status(result.success ? 200 : 409).json(result);
 });
 
 // ============================================================================
