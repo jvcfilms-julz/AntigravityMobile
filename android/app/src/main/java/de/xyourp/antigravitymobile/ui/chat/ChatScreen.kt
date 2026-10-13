@@ -2,6 +2,7 @@ package de.xyourp.antigravitymobile.ui.chat
 
 import android.text.method.LinkMovementMethod
 import android.widget.TextView
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +66,9 @@ import de.xyourp.antigravitymobile.net.ActionButton
 import de.xyourp.antigravitymobile.net.Artifact
 import de.xyourp.antigravitymobile.net.AskPrompt
 import de.xyourp.antigravitymobile.net.StructuredMessage
+import de.xyourp.antigravitymobile.ui.agentResponseText
+import de.xyourp.antigravitymobile.ui.copyToPhoneClipboard
+import de.xyourp.antigravitymobile.ui.shareAgentResponse
 import de.xyourp.antigravitymobile.ui.components.EmptyState
 
 @Composable
@@ -193,11 +200,44 @@ private fun UserBubble(text: String) {
 
 @Composable
 private fun AgentMessage(msg: StructuredMessage, hideCot: Boolean, onAction: (String, String) -> Unit) {
+    val context = LocalContext.current
+    val reply = remember(msg.text) { agentResponseText(msg.text) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (msg.worked.isNotBlank() || msg.activity.isNotEmpty()) {
             WorkedPill(msg, hideCot)
         }
-        if (msg.text.isNotBlank()) ProseHtml(msg.text)
+        if (msg.text.isNotBlank()) {
+            ProseHtml(msg.text)
+            if (reply.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(
+                        onClick = {
+                            copyToPhoneClipboard(context, "Antigravity agent response", reply)
+                            Toast.makeText(context, "Reply copied to Fold clipboard", Toast.LENGTH_SHORT).show()
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.ContentCopy, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Copy reply", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    Surface(
+                        onClick = { shareAgentResponse(context, reply) },
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Share, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Share", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+            }
+        }
         msg.changes?.let { ChangesRow(it.summary, it.add, it.del) }
         if (msg.actions.isNotEmpty()) ActionBar(msg.actions, onAction)
     }
