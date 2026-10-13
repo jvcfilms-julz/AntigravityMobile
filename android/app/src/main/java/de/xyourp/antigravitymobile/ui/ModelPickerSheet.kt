@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +31,8 @@ fun ModelPickerSheet(
     models: List<String>,
     current: String?,
     loading: Boolean,
+    error: String?,
+    onRefresh: () -> Unit,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -37,7 +40,7 @@ fun ModelPickerSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Text(
-                "Select model",
+                "Choose model in the current IDE chat",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -46,12 +49,15 @@ fun ModelPickerSheet(
                 loading && models.isEmpty() -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-                models.isEmpty() -> Text(
-                    "No models reported by the IDE yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                )
+                models.isEmpty() -> Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Text(
+                        error ?: "No live models detected. Make sure the original IDE is open.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onRefresh) { Text("Retry live IDE model list") }
+                }
                 else -> models.forEach { model ->
                     val selected = model == current
                     Row(
