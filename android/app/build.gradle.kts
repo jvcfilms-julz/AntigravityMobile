@@ -16,12 +16,25 @@ android {
         applicationId = "de.xyourp.antigravitymobile"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        // Stable package identity: future builds update this app in place.
+        // Each GitHub Actions build receives a monotonically increasing code.
+        versionCode = 200 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
+        versionName = "1.1.0"
         manifestPlaceholders["appLabel"] = "Antigravity Mobile"
     }
 
     signingConfigs {
+        // A stable signing key is supplied privately by GitHub Actions secrets.
+        // Never commit the key or password to this public fork.
+        create("stableMobile") {
+            val keyPath = System.getenv("AGM_STABLE_KEYSTORE_PATH")
+            if (!keyPath.isNullOrBlank()) {
+                storeFile = File(keyPath)
+                storePassword = System.getenv("AGM_STABLE_STORE_PASSWORD")
+                keyAlias = "antigravity-mobile"
+                keyPassword = System.getenv("AGM_STABLE_STORE_PASSWORD")
+            }
+        }
         create("release") {
             val storeFilePath = project.findProperty("AGM_RELEASE_STORE_FILE") as String?
             if (storeFilePath != null) {
@@ -50,10 +63,13 @@ android {
             if (rc.storeFile != null) signingConfig = rc
         }
         debug {
-            // Install the clipboard handoff test alongside the existing debug
-            // app, whose ephemeral signing certificate cannot be reused here.
+            // Keep the existing Handoff-test package ID; this does NOT create
+            // yet another Android package. Use the canonical display name.
             applicationIdSuffix = ".handoff"
-            manifestPlaceholders["appLabel"] = "Antigravity Handoff"
+            manifestPlaceholders["appLabel"] = "Antigravity Mobile"
+            if (!System.getenv("AGM_STABLE_KEYSTORE_PATH").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("stableMobile")
+            }
         }
     }
 
