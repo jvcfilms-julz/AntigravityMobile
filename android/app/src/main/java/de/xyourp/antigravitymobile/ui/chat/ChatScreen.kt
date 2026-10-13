@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,6 +45,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +74,12 @@ import de.xyourp.antigravitymobile.ui.shareAgentResponse
 import de.xyourp.antigravitymobile.ui.components.EmptyState
 
 @Composable
-fun ChatScreen(vm: ChatViewModel, modifier: Modifier = Modifier) {
+fun ChatScreen(
+    vm: ChatViewModel,
+    sourceIsIde: Boolean,
+    onOpenModelPicker: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by vm.state.collectAsStateWithLifecycle()
 
     Box(modifier.fillMaxSize()) {
@@ -82,6 +89,10 @@ fun ChatScreen(vm: ChatViewModel, modifier: Modifier = Modifier) {
                 hideCot = state.hideCot,
                 onToggleCot = vm::toggleCot,
                 onOpenConversations = vm::openConversations,
+                sourceIsIde = sourceIsIde,
+                creatingIdeChat = state.creatingIdeChat,
+                onNewIdeChat = vm::requestNewIdeChat,
+                onOpenModelPicker = onOpenModelPicker,
             )
 
             Box(Modifier.weight(1f)) {
@@ -112,14 +123,44 @@ fun ChatScreen(vm: ChatViewModel, modifier: Modifier = Modifier) {
         ConversationSheet(
             state = state,
             onPick = vm::switchConversation,
-            onNew = vm::newConversation,
+            onNew = if (sourceIsIde) vm::requestNewIdeChat else vm::newConversation,
             onDismiss = vm::closeConversations,
         )
+    }
+
+    if (state.showNewIdeChatConfirmation) {
+        AlertDialog(
+            onDismissRequest = vm::cancelNewIdeChat,
+            title = { Text("New IDE chat?") },
+            text = { Text("Start a new conversation in the current Antigravity IDE workspace. Your existing conversation remains in IDE history. This will not launch Antigravity 2.0.") },
+            confirmButton = {
+                TextButton(onClick = vm::createNewIdeChat) { Text("New IDE chat") }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::cancelNewIdeChat) { Text("Cancel") }
+            },
+        )
+    }
+    val context = LocalContext.current
+    LaunchedEffect(state.actionNotice) {
+        state.actionNotice?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            vm.clearActionNotice()
+        }
     }
 }
 
 @Composable
-private fun ChatTopBar(model: String, hideCot: Boolean, onToggleCot: () -> Unit, onOpenConversations: () -> Unit) {
+private fun ChatTopBar(
+    model: String,
+    hideCot: Boolean,
+    onToggleCot: () -> Unit,
+    onOpenConversations: () -> Unit,
+    sourceIsIde: Boolean,
+    creatingIdeChat: Boolean,
+    onNewIdeChat: () -> Unit,
+    onOpenModelPicker: () -> Unit,
+) {
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
         Row(
             Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
@@ -130,6 +171,19 @@ private fun ChatTopBar(model: String, hideCot: Boolean, onToggleCot: () -> Unit,
                 if (model.isNotBlank()) {
                     Text(model, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (sourceIsIde) {
+                Surface(
+                    onClick = onOpenModelPicker,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text("Change model", Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.labelMedium)
+                }
+                IconButton(onClick = onNewIdeChat, enabled = !creatingIdeChat) {
+                    Icon(Icons.Filled.Add, "New chat in the original Antigravity IDE")
                 }
             }
             IconButton(onClick = onToggleCot) {
