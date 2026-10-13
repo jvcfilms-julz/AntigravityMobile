@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Backspace
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -87,6 +89,8 @@ fun ScreenScreen(
     onKey: (key: String, ctrl: Boolean, alt: Boolean, shift: Boolean, meta: Boolean) -> Unit,
     onToggleAuto: () -> Unit,
     onRefresh: () -> Unit,
+    onCopyAgentReply: () -> Unit,
+    onCopyPcClipboard: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().imePadding()) {
@@ -434,7 +438,8 @@ fun ScreenScreen(
             }
         }
 
-        ControlBar(inputMode, { onSetMouseMode(it == InputMode.Mouse) }, autoRefresh, onScroll, onSubmit, onKey, onToggleAuto, onRefresh)
+        ControlBar(inputMode, { onSetMouseMode(it == InputMode.Mouse) }, autoRefresh, onScroll, onSubmit, onKey, onToggleAuto, onRefresh,
+            onCopyAgentReply, onCopyPcClipboard)
     }
 }
 
@@ -448,6 +453,8 @@ private fun ControlBar(
     onKey: (key: String, ctrl: Boolean, alt: Boolean, shift: Boolean, meta: Boolean) -> Unit,
     onToggleAuto: () -> Unit,
     onRefresh: () -> Unit,
+    onCopyAgentReply: () -> Unit,
+    onCopyPcClipboard: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
 
@@ -496,6 +503,37 @@ private fun ControlBar(
                     enabled = text.isNotBlank(),
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, "Send + Enter", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            // These controls copy real text to the phone clipboard (not pixels
+            // from the screencast). PC clipboard transfer is explicit: never
+            // silently synchronize sensitive clipboard contents.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    onClick = onCopyAgentReply,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.ContentCopy, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Latest reply", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                Surface(
+                    onClick = onCopyPcClipboard,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.ContentPaste, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("PC clipboard", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
             Row(
