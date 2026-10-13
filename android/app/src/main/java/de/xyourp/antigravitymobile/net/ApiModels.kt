@@ -131,6 +131,13 @@ data class CommandResponse(
     val error: String? = null,
 )
 
+@Serializable
+data class NewIdeChatResponse(
+    val success: Boolean = false,
+    val verified: Boolean = false,
+    val error: String? = null,
+)
+
 // --- CDP source (which Antigravity app the bridge mirrors) ---
 
 @Serializable
