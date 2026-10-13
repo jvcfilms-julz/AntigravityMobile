@@ -33,6 +33,7 @@ import * as OllamaClient from './ollama-client.mjs';
 import * as Git from './git-service.mjs';
 import * as HelperBridge from './helper-bridge.mjs';
 import * as Pairing from './pairing-service.mjs';
+import { requireRemotePairing, verifySocketClient, createPairLimiter } from './remote-access-security.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..');
@@ -453,9 +454,11 @@ ChatStream.setNotifyCallback((evt) => broadcast('agent_event', evt));
 // ============================================================================
 const app = express();
 const httpServer = createServer(app);
-const wss = new WebSocketServer({ server: httpServer });
+const wss = new WebSocketServer({ server: httpServer, verifyClient: verifySocketClient(Pairing.isPaired) });
 
 app.use(express.json({ limit: '50mb' }));
+// Protect every API route, including handlers registered before the legacy PIN gate.
+app.use(requireRemotePairing(Pairing.isPaired));
 
 // ============================================================================
 // Frontend Concatenation — Split source files → single HTML response
@@ -535,11 +538,10 @@ app.use(express.static(join(PROJECT_ROOT, 'public'), {
     },
 }));
 
-// CORS
+// Same-origin browser requests work without CORS. Never grant access to arbitrary
+// websites: the remote-access gate above rejects foreign origins and fetch sites.
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Vary', 'Origin');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
 });
@@ -1447,12 +1449,16 @@ app.get('/api/status', (req, res) => {
 
 // Auth middleware - protect all other API routes
 app.use('/api', (req, res, next) => {
-    // Skip auth check for auth and admin endpoints
-    if (req.path.startsWith('/auth/') || req.path.startsWith('/admin/')) {
+    // Pairing and health probes need to work before a new device has a token.
+    // The early gate still restricts every other remote API to a paired device.
+    if (req.path.startsWith('/auth/') || req.path.startsWith('/admin/') ||
+        req.path === '/pair' || req.path === '/pair/status' || req.path === '/status') {
         return next();
     }
 
-    if (!authEnabled) {
+    // A paired native device is authenticated by its strong, long-lived token.
+    // The optional PIN remains for legacy browser sessions on the local machine.
+    if (!authEnabled || Pairing.isPaired(req.get('x-device-token'))) {
         return next();
     }
 
@@ -2098,12 +2104,20 @@ app.post('/api/launch/conversation', Pairing.requirePaired, (req, res) =>
     launchAntigravity('app', req.body?.path, res));
 
 // --- One-time device pairing (K2) ---
-// Phone submits the code shown on the PC once; gets a token it stores and sends
-// as `x-device-token` on every input request.
+// Reject repeated guesses before they reach the persistent six-digit code.
+const pairLimiter = createPairLimiter();
 app.post('/api/pair', (req, res) => {
+    const peer = req.socket?.remoteAddress || 'unknown';
+    if (!pairLimiter.allowed(peer)) {
+        return res.status(429).json({ error: 'pairing_rate_limited', retryAfterSeconds: 900 });
+    }
     const { code, name } = req.body || {};
     const token = Pairing.pair(String(code ?? ''), name || 'phone');
-    if (!token) return res.status(401).json({ error: 'invalid_code' });
+    if (!token) {
+        pairLimiter.failure(peer);
+        return res.status(401).json({ error: 'invalid_code' });
+    }
+    pairLimiter.clear(peer);
     res.json({ success: true, token });
 });
 
