@@ -22,6 +22,9 @@ data class ChatState(
     /** Collapse the granular chain-of-thought step timeline. */
     val hideCot: Boolean = false,
     val showConversations: Boolean = false,
+    val showNewIdeChatConfirmation: Boolean = false,
+    val creatingIdeChat: Boolean = false,
+    val actionNotice: String? = null,
     val openArtifact: Artifact? = null,
 )
 
@@ -131,6 +134,50 @@ class ChatViewModel(private val repo: AppRepository) : ViewModel() {
             runCatching { repo.api.newConversation() }
             kotlinx.coroutines.delay(500)
             load(initial = false); loadConversations()
+        }
+    }
+
+    /** A new IDE chat must be explicitly confirmed; never substitute a 2.0 chat. */
+    fun requestNewIdeChat() {
+        _state.value = _state.value.copy(
+            showNewIdeChatConfirmation = true, showConversations = false, actionNotice = null)
+    }
+
+    fun cancelNewIdeChat() {
+        _state.value = _state.value.copy(showNewIdeChatConfirmation = false)
+    }
+
+    fun clearActionNotice() {
+        _state.value = _state.value.copy(actionNotice = null)
+    }
+
+    fun createNewIdeChat() {
+        if (_state.value.creatingIdeChat) return
+        _state.value = _state.value.copy(
+            showNewIdeChatConfirmation = false, creatingIdeChat = true, actionNotice = null)
+        viewModelScope.launch {
+            val outcome = runCatching { repo.api.startNewIdeChat() }
+            outcome.onSuccess { response ->
+                _state.value = _state.value.copy(
+                    creatingIdeChat = false,
+                    actionNotice = if (response.success) {
+                        if (response.verified) "New IDE conversation confirmed"
+                        else "New IDE chat requested — verify the new conversation on Screen"
+                    } else {
+                        response.error ?: "IDE did not open a new conversation"
+                    },
+                )
+                if (response.success) {
+                    kotlinx.coroutines.delay(600)
+                    load(initial = false)
+                    loadConversations()
+                }
+            }.onFailure { e ->
+                _state.value = _state.value.copy(
+                    creatingIdeChat = false,
+                    actionNotice = "IDE chat request failed: " + (e.message ?: "connection error"),
+                )
+            }
         }
     }
 
