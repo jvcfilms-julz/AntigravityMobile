@@ -18,6 +18,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+        manifestPlaceholders["appLabel"] = "Antigravity Mobile"
     }
 
     signingConfigs {
@@ -49,7 +50,10 @@ android {
             if (rc.storeFile != null) signingConfig = rc
         }
         debug {
-            applicationIdSuffix = ".debug"
+            // Install the clipboard handoff test alongside the existing debug
+            // app, whose ephemeral signing certificate cannot be reused here.
+            applicationIdSuffix = ".handoff"
+            manifestPlaceholders["appLabel"] = "Antigravity Handoff"
         }
     }
 
