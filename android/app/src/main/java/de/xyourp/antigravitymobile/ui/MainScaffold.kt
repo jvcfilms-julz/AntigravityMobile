@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.xyourp.antigravitymobile.data.AppRepository
 import de.xyourp.antigravitymobile.ui.chat.ChatScreen
@@ -129,6 +131,7 @@ fun MainScaffold(repo: AppRepository, onOpenSettings: () -> Unit) {
         sessionVm.messages.collect { snackbarHostState.showSnackbar(it) }
     }
     val filesContext = LocalContext.current
+    val handoffScope = rememberCoroutineScope()
 
     // Deep links (e.g. tapping a notification) request a tab switch.
     LaunchedEffect(Unit) {
@@ -233,6 +236,39 @@ fun MainScaffold(repo: AppRepository, onOpenSettings: () -> Unit) {
                     onKey = { key, ctrl, alt, shift, meta -> screenVm.key(key, ctrl, alt, shift, meta) },
                     onToggleAuto = { screenVm.toggleAuto() },
                     onRefresh = { screenVm.refreshNow() },
+                    onCopyAgentReply = {
+                        handoffScope.launch {
+                            try {
+                                val chat = repo.api.chatStructured()
+                                val reply = chat.messages.asReversed()
+                                    .firstOrNull { it.role != "user" && it.text.isNotBlank() }
+                                    ?.text?.let(::agentResponseText)
+                                if (reply.isNullOrBlank()) {
+                                    snackbarHostState.showSnackbar("No readable reply yet. Select IDE or use PC clipboard.")
+                                } else {
+                                    copyToPhoneClipboard(filesContext, "Antigravity latest agent reply", reply)
+                                    snackbarHostState.showSnackbar("Latest agent reply copied to Fold")
+                                }
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Couldn't read agent reply: ${e.message ?: "connection error"}")
+                            }
+                        }
+                    },
+                    onCopyPcClipboard = {
+                        handoffScope.launch {
+                            try {
+                                val pcText = repo.api.getClipboard().text
+                                if (pcText.isBlank()) {
+                                    snackbarHostState.showSnackbar("PC clipboard is empty. Copy the reply in Antigravity first.")
+                                } else {
+                                    copyToPhoneClipboard(filesContext, "Windows clipboard from Antigravity", pcText)
+                                    snackbarHostState.showSnackbar("PC clipboard copied to Fold — paste into Project Control")
+                                }
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Couldn't get PC clipboard: ${e.message ?: "connection error"}")
+                            }
+                        }
+                    },
                 )
             }
         }
