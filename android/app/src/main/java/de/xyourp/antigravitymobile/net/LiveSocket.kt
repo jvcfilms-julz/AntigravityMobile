@@ -158,7 +158,13 @@ class LiveSocket(private val scope: CoroutineScope) {
                 if (!gate.isCompleted) gate.complete(Unit)
             }
         }
-        val req = Request.Builder().url(settings.wsUrl).build()
+        // The bridge rejects remote WebSocket handshakes from unpaired devices.
+        // Attach the same persistent pairing token already used by ApiClient.
+        val builder = Request.Builder().url(settings.wsUrl)
+        if (settings.deviceToken.isNotBlank()) {
+            builder.header("x-device-token", settings.deviceToken)
+        }
+        val req = builder.build()
         webSocket = client.newWebSocket(req, listener)
         gate.await()
         webSocket = null
