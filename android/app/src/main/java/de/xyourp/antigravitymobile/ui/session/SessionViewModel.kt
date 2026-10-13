@@ -34,6 +34,7 @@ data class SessionState(
     val currentModel: String? = null,
     val currentMode: String? = null,
     val modelsLoading: Boolean = false,
+    val modelError: String? = null,
     val agentStatus: AgentStatus = AgentStatus.Idle,
     val pendingApproval: ApprovalsResponse? = null,
     val respondingApproval: Boolean = false,
@@ -224,31 +225,58 @@ class SessionViewModel(private val repo: AppRepository) : ViewModel() {
     }
 
     fun loadModels() {
+        val isIde = _state.value.sourcePreference == "ide"
         viewModelScope.launch {
-            _state.value = _state.value.copy(modelsLoading = true)
-            runCatching { repo.api.models() }
-                .onSuccess { r ->
-                    val current = r.currentModel?.takeIf { it.isNotBlank() && it != "Unknown" }
-                        ?: _state.value.currentModel
-                    _state.value = _state.value.copy(
-                        models = r.models,
-                        currentModel = current,
-                        currentMode = r.currentMode?.takeIf { it != "Unknown" } ?: _state.value.currentMode,
-                        modelsLoading = false,
-                    )
+            _state.value = _state.value.copy(
+                modelsLoading = true, modelError = null,
+                models = if (isIde) emptyList() else _state.value.models,
+            )
+            runCatching { if (isIde) repo.api.ideModels() else repo.api.models() }
+                .onSuccess { result ->
+                    if (result.error != null || result.models.isEmpty()) {
+                        _state.value = _state.value.copy(
+                            models = emptyList(), modelsLoading = false,
+                            modelError = result.error ?: "No models reported by the selected IDE",
+                        )
+                    } else {
+                        _state.value = _state.value.copy(
+                            models = result.models,
+                            currentModel = result.currentModel?.takeIf { it.isNotBlank() && it != "Unknown" }
+                                ?: _state.value.currentModel,
+                            currentMode = result.currentMode?.takeIf { it != "Unknown" } ?: _state.value.currentMode,
+                            modelError = null,
+                            modelsLoading = false,
+                        )
+                    }
                 }
-                .onFailure { _state.value = _state.value.copy(modelsLoading = false) }
+                .onFailure { e ->
+                    _state.value = _state.value.copy(modelsLoading = false, models = emptyList(),
+                        modelError = e.message ?: "Could not read the current IDE model menu")
+                }
         }
     }
 
     fun selectModel(model: String) {
-        // Optimistic update + persist.
-        _state.value = _state.value.copy(currentModel = model)
+        val isIde = _state.value.sourcePreference == "ide"
+        if (_state.value.models.none { it == model }) {
+            _messages.tryEmit("Model is not in the current IDE model list")
+            return
+        }
         viewModelScope.launch {
-            repo.saveSelectedModel(model)
-            runCatching { repo.api.setModel(model) }.onSuccess { res ->
-                res.selected?.let { _state.value = _state.value.copy(currentModel = it) }
+            val result = runCatching { if (isIde) repo.api.selectIdeModel(model) else repo.api.setModel(model) }
+            result.onSuccess { response ->
+                if (response.success && !response.selected.isNullOrBlank()) {
+                    _state.value = _state.value.copy(currentModel = response.selected)
+                    repo.saveSelectedModel(response.selected)
+                    _messages.tryEmit("Model confirmed: " + response.selected)
+                } else {
+                    _messages.tryEmit(response.error ?: "The IDE did not confirm the model change")
+                }
+            }.onFailure { e ->
+                _messages.tryEmit("Could not change model: " + (e.message ?: "connection error"))
             }
+            // Never leave an optimistic/incorrect model label on the phone.
+            loadModels()
         }
     }
 
