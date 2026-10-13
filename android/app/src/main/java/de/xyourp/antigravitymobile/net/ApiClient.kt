@@ -157,6 +157,18 @@ class ApiClient(private val settingsProvider: () -> ConnectionSettings) {
     suspend fun setModel(model: String): SetModelResponse =
         json.decodeFromString(postRaw("/api/models/set", bodyOf("model", model)))
 
+    // Original Antigravity IDE only: routes refuse to touch Antigravity 2.0.
+    // The list contains models actually visible in the IDE dropdown.
+    suspend fun ideModels(): ModelsResponse =
+        json.decodeFromString(getRaw("/api/ide/models"))
+
+    suspend fun selectIdeModel(model: String): SetModelResponse =
+        json.decodeFromString(postRaw("/api/ide/models/select", bodyOf("model", model)))
+
+    suspend fun startNewIdeChat(): NewIdeChatResponse =
+        json.decodeFromString(postRaw("/api/ide/conversations/new", "{}"))
+
+
     suspend fun quota(): QuotaResponse =
         json.decodeFromString(getRaw("/api/quota"))
 
