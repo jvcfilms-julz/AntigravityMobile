@@ -24,10 +24,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android SDK tools
-        uses: android-actions/setup-android@v3
       - name: Install Android platform and build tools
-        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+        run: |
+          # GitHub's Ubuntu runner already includes modern Android command-line
+          # tools. The deprecated sdkmanager "tools" package is unavailable.
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0"
       - name: Build debug APK without a release keystore
         working-directory: android
         run: |
