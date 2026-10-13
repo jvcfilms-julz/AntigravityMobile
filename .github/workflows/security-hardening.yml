@@ -1,0 +1,28 @@
+name: Remote access security checks
+
+on:
+  push:
+    branches:
+      - security/remote-access-hardening
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  node-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Check server syntax
+        run: node --check src/http-server.mjs
+      - name: Check security helper syntax
+        run: node --check src/remote-access-security.mjs
+      - name: Exercise pairing and WebSocket access controls
+        run: node --test tests/remote-access-security.test.mjs
