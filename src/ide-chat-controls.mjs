@@ -25,6 +25,40 @@ export function uniqueModels(values) {
     return output;
 }
 
+/**
+ * The user may launch the IDE on port 9333 manually. DevToolsActivePort is not
+ * guaranteed to exist for a fixed port, so do not depend on that discovery
+ * file. Validate the actual VS Code workbench URL before touching its UI.
+ */
+export function isIdeWorkbenchTarget(target) {
+    if (target?.type !== 'page') return false;
+    const url = String(target.url || '');
+    return /(?:^|\/)workbench\.html(?:[?#]|$)/i.test(url)
+        || /^vscode-(?:file|web):\/\//i.test(url);
+}
+
+export async function findOriginalIdeWorkbench() {
+    const discovered = await CDP.getSources();
+    const ports = [...new Set([
+        ...(discovered.sources || []).filter(x => x.id === 'ide').map(x => x.port),
+        9333, 9334, 9222,
+    ])];
+    const wantedName = String(CDP.getPreferredWorkspace() || '').toLowerCase();
+    for (const port of ports) {
+        try {
+            const response = await fetch('http://127.0.0.1:' + port + '/json/list', {
+                signal: AbortSignal.timeout(1400),
+            });
+            if (!response.ok) continue;
+            const targets = (await response.json()).filter(isIdeWorkbenchTarget);
+            if (!targets.length) continue;
+            return targets.find(t => wantedName &&
+                String(t.title || '').toLowerCase().startsWith(wantedName)) || targets[0];
+        } catch { /* port unreachable, not an IDE, or invalid JSON */ }
+    }
+    return null;
+}
+
 const CONTROL_SCRIPT = String.raw`(async () => {
     const kind = "__ACTION__";
     const requested = __MODEL__;
@@ -126,9 +160,9 @@ async function evaluateInSelectedIde(kind, model = '') {
         } catch { /* ignore unrelated CDP notifications */ }
     };
     try {
-        const target = await CDP.findEditorTarget();
+        const target = await findOriginalIdeWorkbench();
         if (!target?.webSocketDebuggerUrl)
-            return { success: false, error: 'The IDE editor window was not found' };
+            return { success: false, error: 'No original IDE workbench detected. Open the IDE with CDP enabled.' };
         client = await CDP.connectToTarget(target);
         client.ws.on('message', onMessage);
         await client.send('Runtime.enable', {}, 6000);
